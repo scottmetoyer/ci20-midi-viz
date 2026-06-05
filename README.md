@@ -39,6 +39,7 @@ viz.c                 Main app: GLES2 renderer + background USB-MIDI thread + re
 host.c                Minimal shader runner (no MIDI) — handy for testing a shader in isolation
 midiread.c            Standalone MIDI monitor — prints note/CC/pitchbend events (debugging)
 build.sh              Builds all three on the board
+runviz.sh             Runs viz with the framebuffer freed from the text console (see below)
 shaders/
   reactive.frag       The MIDI-reactive demo shader (used by viz)
   plasma.frag         A plain animated shader (used by glrun/host)
@@ -93,6 +94,28 @@ sh build.sh
 `scale` trades sharpness for speed: `1` = native 1080p (~7 fps), `3` = 640×360 (~37 fps,
 the sweet spot), `6` = 320×180 (~90 fps). Pick the lowest number that still looks good for
 your shader.
+
+### `eglInitialize failed (0x3003)` — the framebuffer-console conflict
+
+PowerVR's FLIP WSEGL needs exclusive use of `/dev/fb0`, but on a normal boot the Linux
+**framebuffer console** (`fbcon`, your text login on HDMI) owns it. So running `viz`
+directly fails with `EGL_BAD_ALLOC (0x3003)`. The fix is to unbind fbcon first — use the
+wrapper, which does it for you and restores the console on exit:
+
+```sh
+sudo ./runviz.sh shaders/reactive.frag      # unbinds fbcon, runs viz, rebinds on Ctrl-C
+```
+
+Manual equivalent, if you prefer:
+```sh
+echo 0 | sudo tee /sys/class/vtconsole/vtcon1/bind   # free the framebuffer (HDMI text goes black)
+./viz shaders/reactive.frag
+echo 1 | sudo tee /sys/class/vtconsole/vtcon1/bind   # restore the console
+```
+(`vtcon1` is the "frame buffer device" console here; check `/sys/class/vtconsole/*/name`.)
+
+> For an always-on visuals "appliance," unbind fbcon at boot (e.g. from `/etc/rc.local`)
+> and drive the box over SSH — then `./viz` runs without sudo or the wrapper.
 
 ---
 
