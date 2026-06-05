@@ -111,6 +111,21 @@ Start from `shaders/reactive.frag`. Your shader gets these uniforms:
 | `u_pitch` | `float` | -1..1, pitch-bend wheel |
 | `u_mod` | `float` | 0..1, mod wheel (MIDI CC 1) |
 | `u_note` | `float` | 0..1, most recent note number / 127 |
+| `u_cc[128]` | `float[]` | 0..1, **every** MIDI CC by number — `u_cc[74]`, `u_cc[7]`, etc. |
+| `u_vel[128]` | `float[]` | 0..1, current velocity of each note (0 = off) — for per-key visuals |
+
+`u_cc[]` and `u_vel[]` mean you almost never need to touch `viz.c`: any knob/fader your
+controller sends arrives in `u_cc[<number>]`, and every key's velocity is in `u_vel[<note>]`,
+already. Just index the one you want in your shader. (`u_mod`/`u_note`/`u_energy` are kept as
+convenient aggregates.) Run `midiread` to discover which CC numbers your controls send.
+
+> **Uniform budget (important on this GPU):** the SGX540 reports **64** fragment uniform
+> vectors (`viz` prints this at startup). Each `float[128]` array consumes ~32. So a single
+> shader can use **one** of `u_cc[128]` / `u_vel[128]` plus the scalar uniforms — **not both
+> at once** (declaring both overflows the 64-vector budget and the shader fails to link).
+> A whole array is allocated even if you only read one element, so pick the one you need.
+> If you need both CC and note data in one shader, reduce the C side to upload a smaller
+> range (e.g. the 32 CCs / 61 keys you actually use) in `viz.c`.
 
 Minimal shader skeleton:
 ```glsl

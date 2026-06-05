@@ -224,7 +224,10 @@ int main(int argc, char **argv) {
     GLint u_time=glGetUniformLocation(sp,"u_time"), u_res=glGetUniformLocation(sp,"u_resolution");
     GLint u_energy=glGetUniformLocation(sp,"u_energy"), u_pitch=glGetUniformLocation(sp,"u_pitch");
     GLint u_mod=glGetUniformLocation(sp,"u_mod"), u_note=glGetUniformLocation(sp,"u_note");
+    GLint u_cc=glGetUniformLocation(sp,"u_cc"), u_vel=glGetUniformLocation(sp,"u_vel");
     GLint u_tex=glGetUniformLocation(bp,"u_tex");
+    { GLint muv=0; glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_VECTORS,&muv);
+      fprintf(stderr,"max fragment uniform vectors: %d (each float[128] array uses ~32)\n",muv); }
 
     GLuint tex; glGenTextures(1,&tex); glBindTexture(GL_TEXTURE_2D,tex);
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,rw,rh,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
@@ -248,8 +251,9 @@ int main(int argc, char **argv) {
 
         /* snapshot MIDI state */
         float energy=0.0f, pitch, mod, note;
+        float cc[128], vel[128];
         pthread_mutex_lock(&M.lock);
-        for (int i=0;i<128;i++) energy += M.vel[i];
+        for (int i=0;i<128;i++){ vel[i]=M.vel[i]; cc[i]=M.cc[i]; energy += M.vel[i]; }
         pitch=M.pitch; mod=M.cc[1]; note=M.last_note/127.0f;
         pthread_mutex_unlock(&M.lock);
         if (energy>1.0f) energy=1.0f;
@@ -264,6 +268,8 @@ int main(int argc, char **argv) {
         if(u_pitch>=0)  glUniform1f(u_pitch,pitch);
         if(u_mod>=0)    glUniform1f(u_mod,mod);
         if(u_note>=0)   glUniform1f(u_note,note);
+        if(u_cc>=0)     glUniform1fv(u_cc,128,cc);   /* all 128 CC values, 0..1 */
+        if(u_vel>=0)    glUniform1fv(u_vel,128,vel); /* per-note velocities, 0..1 */
         glEnableVertexAttribArray(0); glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,0,quad);
         glDrawArrays(GL_TRIANGLES,0,6);
 
