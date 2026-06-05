@@ -39,7 +39,6 @@ viz.c                 Main app: GLES2 renderer + background USB-MIDI thread + re
 host.c                Minimal shader runner (no MIDI) — handy for testing a shader in isolation
 midiread.c            Standalone MIDI monitor — prints note/CC/pitchbend events (debugging)
 build.sh              Builds all three on the board
-runviz.sh             Runs viz with the framebuffer freed from the text console (see below)
 shaders/
   reactive.frag       The MIDI-reactive demo shader (used by viz)
   plasma.frag         A plain animated shader (used by glrun/host)
@@ -75,6 +74,16 @@ Then **unplug and replug** your MIDI controller (udev applies the new permission
 fresh connect). This rule matches *any* USB MIDI-class device, so all your controllers
 work without editing it.
 
+### 3. Start the PowerVR GPU services on boot
+The SGX services must be initialized before any GLES app can run. The desktop used to do
+this; with X disabled, you must do it yourself, or `viz` fails at `eglInitialize` with
+`EGL_BAD_ALLOC (0x3003)`. Add it to `/etc/rc.local` so it runs every boot:
+```sh
+sudo sed -i 's|^exit 0|/usr/bin/pvrsrvctl --start --no-module\nexit 0|' /etc/rc.local
+```
+(Or run `sudo pvrsrvctl --start --no-module` by hand each boot.) This creates
+`/dev/pvrsrvkm` and starts the GPU services.
+
 ---
 
 ## Build & run (on the board)
@@ -95,27 +104,16 @@ sh build.sh
 the sweet spot), `6` = 320×180 (~90 fps). Pick the lowest number that still looks good for
 your shader.
 
-### `eglInitialize failed (0x3003)` — the framebuffer-console conflict
+### Troubleshooting `eglInitialize` failures
 
-PowerVR's FLIP WSEGL needs exclusive use of `/dev/fb0`, but on a normal boot the Linux
-**framebuffer console** (`fbcon`, your text login on HDMI) owns it. So running `viz`
-directly fails with `EGL_BAD_ALLOC (0x3003)`. The fix is to unbind fbcon first — use the
-wrapper, which does it for you and restores the console on exit:
+- **`0x3003` (EGL_BAD_ALLOC)** → the PowerVR SGX services aren't running. Start them with
+  `sudo pvrsrvctl --start --no-module` (see setup step 3 to make it automatic on boot).
+  This is the usual one after a fresh boot.
+- **`0x3001` (EGL_NOT_INITIALIZED)** → the X server (lightdm) is running and owns the GPU.
+  Stop it: `sudo service lightdm stop` (setup step 1 disables it permanently).
 
-```sh
-sudo ./runviz.sh shaders/reactive.frag      # unbinds fbcon, runs viz, rebinds on Ctrl-C
-```
-
-Manual equivalent, if you prefer:
-```sh
-echo 0 | sudo tee /sys/class/vtconsole/vtcon1/bind   # free the framebuffer (HDMI text goes black)
-./viz shaders/reactive.frag
-echo 1 | sudo tee /sys/class/vtconsole/vtcon1/bind   # restore the console
-```
-(`vtcon1` is the "frame buffer device" console here; check `/sys/class/vtconsole/*/name`.)
-
-> For an always-on visuals "appliance," unbind fbcon at boot (e.g. from `/etc/rc.local`)
-> and drive the box over SSH — then `./viz` runs without sudo or the wrapper.
+Only one GLES app can own the display at a time, so also make sure a previous `viz` is
+stopped (`pkill viz`) before launching another.
 
 ---
 
