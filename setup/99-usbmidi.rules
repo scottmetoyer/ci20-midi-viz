@@ -1,0 +1,3 @@
+# Grant non-root userspace usbfs access to ANY USB MIDI-class device.
+# Matches devices exposing an Audio/MIDIStreaming interface (class 01, subclass 03).
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{ID_USB_INTERFACES}=="*:0103*", MODE="0666"

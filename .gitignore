@@ -1,0 +1,5 @@
+# built binaries (compiled on the board, not checked in)
+viz
+glrun
+midiread
+*.o
